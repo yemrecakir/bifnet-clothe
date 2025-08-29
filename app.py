@@ -94,11 +94,25 @@ birefnet_service = None
 def health_check():
     return {'status': 'ok', 'service': 'BiRefNet Background Remover'}
 
+@app.route('/init', methods=['POST'])
+def init_model():
+    try:
+        global birefnet_service
+        if birefnet_service is None:
+            print("🔄 Initializing BiRefNet model...")
+            birefnet_service = BiRefNetService()
+            return {'status': 'initialized', 'message': 'Model loaded successfully'}
+        else:
+            return {'status': 'already_initialized', 'message': 'Model already loaded'}
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/remove-background', methods=['POST'])
 def remove_background():
     try:
         global birefnet_service
         if birefnet_service is None:
+            print("🔄 Loading BiRefNet model...")
             birefnet_service = BiRefNetService()
         
         # Get image from request
