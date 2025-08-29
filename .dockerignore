@@ -1,0 +1,61 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Test outputs and temp files
+test_fast/
+test_single/
+smart_refined/
+individual_items/
+border_test/
+gradient_test/
+temp_api/
+
+# Model files (too large for Docker build - download at runtime)
+weights/
+models/
+
+# Test images (keep sample images for testing)
+# *.jpg
+# *.png  
+# *.jpeg
+
+# Logs
+*.log

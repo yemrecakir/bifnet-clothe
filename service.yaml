@@ -1,0 +1,48 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: birefnet-api
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/cpu: "4"
+        run.googleapis.com/memory: "8Gi"
+        run.googleapis.com/max-scale: "5"
+        run.googleapis.com/timeout: "3600s"
+        # Extended startup timeout for model loading
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 1000
+      timeoutSeconds: 3600
+      containers:
+      - image: gcr.io/PROJECT_ID/birefnet-api
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        resources:
+          limits:
+            cpu: "4"
+            memory: "8Gi"
+        # Health check configuration
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 600  # 10 minutes for model loading
+          periodSeconds: 60
+          timeoutSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 600  # 10 minutes for model loading
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3

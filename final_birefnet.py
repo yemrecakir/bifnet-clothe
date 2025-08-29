@@ -7,6 +7,7 @@ Using transformers AutoModelForImageSegmentation
 import torch
 import torch.nn.functional as F
 from transformers import AutoModelForImageSegmentation
+from model_cache import get_cached_model
 from PIL import Image
 import numpy as np
 import cv2
@@ -15,28 +16,27 @@ import argparse
 from pathlib import Path
 
 class FinalBiRefNet:
-    def __init__(self, model_name='ZhengPeng7/BiRefNet', device=None):
+    def __init__(self, model_name='ZhengPeng7/BiRefNet', device=None, optimize_for_inference=True):
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         print(f"🔥 Using device: {self.device}")
         
-        print("📥 Loading BiRefNet with proper weights...")
+        print("📥 Loading BiRefNet with optimizations...")
         
-        # Load the model from Hugging Face with proper weights
-        self.model = AutoModelForImageSegmentation.from_pretrained(
-            model_name,
-            trust_remote_code=True
+        # Use cached model for faster loading
+        print("📦 Loading model from cache...")
+        self.model = get_cached_model(
+            model_name=model_name,
+            device=self.device,
+            optimize_for_inference=optimize_for_inference
         )
         
-        self.model.to(self.device)
-        self.model.eval()
+        print("✅ BiRefNet loaded with OPTIMIZATIONS!")
         
-        print("✅ BiRefNet loaded with PROPER WEIGHTS!")
-        
-        # Image preprocessing parameters
-        self.image_size = 1024
+        # Image preprocessing parameters - smaller for speed
+        self.image_size = 256  # Reduced from 320 for even faster processing
     
     def preprocess_image(self, image_input):
-        """Preprocess image for BiRefNet"""
+        """Optimized image preprocessing for BiRefNet"""
         # Load image
         if isinstance(image_input, str):
             image = Image.open(image_input).convert('RGB')
@@ -47,33 +47,39 @@ class FinalBiRefNet:
         
         original_size = image.size
         
-        # Resize image to model input size
-        image_resized = image.resize((self.image_size, self.image_size), Image.LANCZOS)
+        # Optimized resize with BILINEAR (faster than LANCZOS)
+        image_resized = image.resize((self.image_size, self.image_size), Image.BILINEAR)
         
-        # Convert to tensor
-        image_tensor = torch.tensor(np.array(image_resized)).permute(2, 0, 1).float()
-        image_tensor = image_tensor / 255.0
+        # More efficient tensor conversion
+        image_array = np.array(image_resized, dtype=np.float32) / 255.0
+        image_tensor = torch.from_numpy(image_array).permute(2, 0, 1)
         
-        # Normalize
-        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        # Normalize (move to device for efficiency)
+        mean = torch.tensor([0.485, 0.456, 0.406], device=self.device, dtype=image_tensor.dtype).view(3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225], device=self.device, dtype=image_tensor.dtype).view(3, 1, 1)
+        
+        image_tensor = image_tensor.to(self.device)
         image_tensor = (image_tensor - mean) / std
         
         # Add batch dimension
-        image_tensor = image_tensor.unsqueeze(0).to(self.device)
+        image_tensor = image_tensor.unsqueeze(0)
         
         return image_tensor, original_size, image
     
     def remove_background(self, image_input, output_path=None):
-        """Remove background using BiRefNet with proper weights"""
-        with torch.no_grad():
+        """Optimized background removal using BiRefNet"""
+        # Enable autocast for mixed precision if on GPU
+        autocast_context = torch.cuda.amp.autocast() if self.device.type == 'cuda' else torch.no_grad()
+        
+        with autocast_context:
             # Preprocess
             processed_image, original_size, original_image = self.preprocess_image(image_input)
             
-            print(f"🎯 Processing image: {processed_image.shape}")
+            print(f"🎯 Processing image: {processed_image.shape} on {self.device}")
             
-            # Model inference - this should work properly now!
-            prediction = self.model(processed_image)
+            # Optimized model inference with memory efficiency
+            with torch.inference_mode():
+                prediction = self.model(processed_image)
             
             # The prediction should be a tensor with segmentation mask
             if isinstance(prediction, dict):
@@ -121,22 +127,18 @@ class FinalBiRefNet:
             return result_image, Image.fromarray((mask_np * 255).astype(np.uint8), 'L')
     
     def post_process_mask(self, mask):
-        """Post-process the segmentation mask"""
+        """Optimized mask post-processing"""
         # Convert to uint8
         mask_uint8 = (mask * 255).astype(np.uint8)
         
-        # Apply morphological operations
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        # Reduced morphological operations for speed
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
         
-        # Close holes
+        # Simplified processing - just close holes
         mask_uint8 = cv2.morphologyEx(mask_uint8, cv2.MORPH_CLOSE, kernel)
         
-        # Remove noise
-        kernel_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        mask_uint8 = cv2.morphologyEx(mask_uint8, cv2.MORPH_OPEN, kernel_small)
-        
-        # Smooth edges
-        mask_uint8 = cv2.GaussianBlur(mask_uint8, (3, 3), 0)
+        # Light smoothing only
+        mask_uint8 = cv2.medianBlur(mask_uint8, 3)
         
         return mask_uint8.astype(np.float32) / 255.0
 
