@@ -20,8 +20,10 @@ class FinalBiRefNet:
         self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         print(f"🔥 Using device: {self.device}")
         
-        print("📥 Loading BiRefNet with optimizations...")
+        print("📥 Loading BiRefNet with ofgptimizations...")
         
+
+
         # Use cached model for faster loading
         print("📦 Loading model from cache...")
         self.model = get_cached_model(
